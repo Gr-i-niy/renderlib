@@ -32,3 +32,5 @@ if (CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME AND ENABLE_TESTS)
   enable_testing()
   add_subdirectory(tests)
 endif ()
+
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)

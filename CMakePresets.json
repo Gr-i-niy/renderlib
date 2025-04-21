@@ -1,5 +1,10 @@
-﻿{
-  "version": 3,
+{
+  "version": 8,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 24,
+    "patch": 0
+  },
   "configurePresets": [
     {
       "name": "base",
@@ -8,7 +13,8 @@
       "binaryDir": "${sourceDir}/out/build/${presetName}",
       "installDir": "${sourceDir}/out/install/${presetName}",
       "cacheVariables": {
-        "CMAKE_COMPILE_WARNING_AS_ERROR": "ON"
+        "CMAKE_COMPILE_WARNING_AS_ERROR": "ON",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
       },
       "toolchainFile": "${sourceDir}/vcpkg/scripts/buildsystems/vcpkg.cmake"
     },
@@ -29,26 +35,6 @@
       }
     },
     {
-      "name": "wx64-debug",
-      "displayName": "x64 Debug",
-      "inherits": "windows-base",
-      "architecture": {
-        "value": "x64",
-        "strategy": "external"
-      },
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug"
-      }
-    },
-    {
-      "name": "wx64-release",
-      "displayName": "x64 Release",
-      "inherits": "wx64-debug",
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Release"
-      }
-    },
-    {
       "name": "linux-base",
       "hidden": true,
       "inherits": "base",
@@ -65,8 +51,28 @@
       }
     },
     {
+      "name": "wx64-debug",
+      "displayName": "Win x64 Debug",
+      "inherits": "windows-base",
+      "architecture": {
+        "value": "x64",
+        "strategy": "external"
+      },
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "wx64-release",
+      "displayName": "Win x64 Release",
+      "inherits": "wx64-debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
       "name": "lx64-debug",
-      "displayName": "x64 Debug",
+      "displayName": "Linux x64 Debug",
       "inherits": "linux-base",
       "architecture": {
         "value": "x64",
@@ -78,7 +84,7 @@
     },
     {
       "name": "lx64-release",
-      "displayName": "x64 Release",
+      "displayName": "Linux x64 Release",
       "inherits": "lx64-debug",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release"
@@ -130,6 +136,84 @@
       "name": "lx64-release",
       "inherits": "base",
       "configurePreset": "lx64-release"
+    }
+  ],
+  "workflowPresets": [
+    {
+      "name": "build-test-linux-debug",
+      "displayName": "Build & Test (Linux Debug)",
+      "description": "Configure, build, and test using lx64-debug",
+      "steps": [
+        {
+          "type": "configure",
+          "name": "lx64-debug"
+        },
+        {
+          "type": "build",
+          "name": "lx64-debug"
+        },
+        {
+          "type": "test",
+          "name": "lx64-debug"
+        }
+      ]
+    },
+    {
+      "name": "build-test-linux-release",
+      "displayName": "Build & Test (Linux Release)",
+      "description": "Configure, build, and test using lx64-release",
+      "steps": [
+        {
+          "type": "configure",
+          "name": "lx64-release"
+        },
+        {
+          "type": "build",
+          "name": "lx64-release"
+        },
+        {
+          "type": "test",
+          "name": "lx64-release"
+        }
+      ]
+    },
+    {
+      "name": "build-test-windows-debug",
+      "displayName": "Build & Test (Windows Debug)",
+      "description": "Configure, build, and test using wx64-debug",
+      "steps": [
+        {
+          "type": "configure",
+          "name": "wx64-debug"
+        },
+        {
+          "type": "build",
+          "name": "wx64-debug"
+        },
+        {
+          "type": "test",
+          "name": "wx64-debug"
+        }
+      ]
+    },
+    {
+      "name": "build-test-windows-release",
+      "displayName": "Build & Test (Windows Release)",
+      "description": "Configure, build, and test using wx64-release",
+      "steps": [
+        {
+          "type": "configure",
+          "name": "wx64-release"
+        },
+        {
+          "type": "build",
+          "name": "wx64-release"
+        },
+        {
+          "type": "test",
+          "name": "wx64-release"
+        }
+      ]
     }
   ]
 }

@@ -1,0 +1,50 @@
+name: Build Project
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths-ignore:
+      - docs/**
+      - README.md
+      - .gitignore
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - docs/**
+      - README.md
+      - .gitignore
+
+jobs:
+  build:
+    name: Build on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            preset: wx64-debug
+          - os: ubuntu-latest
+            preset: lx64-debug
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Install Dependencies using Composite Action
+        uses: ./.github/composite-actions/install-dependencies
+
+      - name: Configure CMake
+        run: cmake --preset ${{ matrix.preset }}
+
+      - name: Build Project
+        run: cmake --build --preset ${{ matrix.preset }}
+
+      # - name: Run Tests
+      #   run: ctest --preset ${{ matrix.preset }}
