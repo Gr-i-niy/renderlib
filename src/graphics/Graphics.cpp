@@ -1,6 +1,6 @@
 #include "graphics/Graphics.h"
 
-namespace engine::graphics {
+ namespace engine::graphics {
 Graphics* Graphics::getInstance() {
     static Graphics singleton;
     return &singleton;
@@ -9,6 +9,7 @@ Graphics* Graphics::getInstance() {
 uint64_t Graphics::create_mesh_instance() {
     std::uint64_t new_index;
     std::uint64_t new_uid;
+       std::uint64_t sosal;
 
     if (!meshes.empty()) {
         auto lastPair = *meshes.rbegin();
