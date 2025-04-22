@@ -33,9 +33,10 @@ jobs:
       - name: Install Dependencies using Composite Action
         uses: ./.github/composite-actions/install-dependencies
 
-      - name: Configure project (Linux Debug - generates compile_commands.json)
-        run: |
-          cmake --preset lx64-debug
+      - name: Configure
+        uses: lukka/run-cmake@v10
+        with:
+          configurePreset: lx64-debug
 
       - name: Run C++ Linter
         uses: cpp-linter/cpp-linter-action@v2

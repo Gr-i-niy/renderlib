@@ -1,24 +1,16 @@
-name: Build Project
+name: Build and Test
 
 on:
-  pull_request:
-    branches:
-      - main
-    paths-ignore:
-      - docs/**
-      - README.md
-      - .gitignore
   push:
     branches:
       - main
-    paths-ignore:
-      - docs/**
-      - README.md
-      - .gitignore
+  pull_request:
+    branches:
+      - main
 
 jobs:
   build:
-    name: Build on ${{ matrix.os }}
+    name: Build on ${{ matrix.os }} (${{ matrix.config }})
     runs-on: ${{ matrix.os }}
 
     strategy:
@@ -27,24 +19,30 @@ jobs:
         include:
           - os: windows-latest
             preset: wx64-debug
+            config: Debug
           - os: ubuntu-latest
             preset: lx64-debug
+            config: Debug
+          - os: windows-latest
+            preset: wx64-release
+            config: Release
+          - os: ubuntu-latest
+            preset: lx64-release
+            config: Release
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           submodules: true
-          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: '0'
 
-      - name: Install Dependencies using Composite Action
+      - name: Install Dependencies
         uses: ./.github/composite-actions/install-dependencies
 
-      - name: Configure CMake
-        run: cmake --preset ${{ matrix.preset }}
-
-      - name: Build Project
-        run: cmake --build --preset ${{ matrix.preset }}
-
-      # - name: Run Tests
-      #   run: ctest --preset ${{ matrix.preset }}
+      - name: Run CMake Build and Test
+        uses: lukka/run-cmake@v10
+        with:
+          configurePreset: ${{ matrix.preset }}
+          buildPreset: ${{ matrix.preset }}
+          testPreset: ${{ matrix.preset }}
