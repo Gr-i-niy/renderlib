@@ -1,6 +1,7 @@
 #pragma once
 
 #include <filesystem>
+#include <memory> // Added for std::unique_ptr (though MaterialPipeline might bring it in)
 
 #include "vk_descriptors.h"
 #include "vk_images.h"
@@ -36,8 +37,10 @@ struct GLTFMetallic_Roughness {
 
     DescriptorWriter writer;
 
+    GLTFMetallic_Roughness(); // Add default constructor if needed for VulkanEngine member
+    ~GLTFMetallic_Roughness(); // Added destructor
     void build_pipelines(VulkanEngine* engine);
-    void clear_resources(VkDevice device);
+    // void clear_resources(VkDevice device); // Removed, RAII will handle
     MaterialInstance write_material(
             VkDevice device, MaterialPass pass,
             const MaterialResources& resources,

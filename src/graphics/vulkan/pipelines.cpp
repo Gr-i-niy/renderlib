@@ -1,5 +1,11 @@
 #include "graphics/vulkan/pipelines.h"
-#include "graphics/vulkan/vk_engine.h"
+#include "graphics/vulkan/vk_engine.h" // For VulkanEngine, VulkanPipelineLayout, VulkanPipeline wrappers
+
+// Default constructor (if added in header)
+GLTFMetallic_Roughness::GLTFMetallic_Roughness() {}
+
+// Destructor
+GLTFMetallic_Roughness::~GLTFMetallic_Roughness() {} // Empty, unique_ptrs handle cleanup
 
 void GLTFMetallic_Roughness::build_pipelines(VulkanEngine* engine) {
     VkShaderModule meshFragShader =
@@ -7,15 +13,21 @@ void GLTFMetallic_Roughness::build_pipelines(VulkanEngine* engine) {
     VkShaderModule meshVertexShader =
             load_shader(engine, "./shaders/mesh.vert.spv", "vertex");
 
-    create_material_layout(engine);
-    VkPipelineLayout newLayout = create_pipeline_layout(engine);
+    create_material_layout(engine); // Creates this->materialLayout (VkDescriptorSetLayout)
 
-    opaquePipeline.layout = newLayout;
-    transparentPipeline.layout = newLayout;
+    // Create pipeline layouts - they must be separate unique_ptr objects now
+    // The create_pipeline_layout helper will be modified or its logic inlined/called twice
+    // For now, let's assume create_pipeline_layout is modified to return the CreateInfo
+    // and we make_unique from that. Or, it returns a unique_ptr directly.
 
-    build_opaque_pipeline(engine, meshVertexShader, meshFragShader, newLayout);
-    build_transparent_pipeline(engine, meshVertexShader, meshFragShader,
-                               newLayout);
+    // Modifying create_pipeline_layout to return unique_ptr for simplicity here.
+    // If create_pipeline_layout is called twice, it creates two distinct Vulkan objects.
+    opaquePipeline.layout = this->create_pipeline_layout_unique_ptr(engine); // New helper or modified
+    transparentPipeline.layout = this->create_pipeline_layout_unique_ptr(engine); // New helper or modified
+
+    // Pass the raw layout handle to build_..._pipeline methods
+    build_opaque_pipeline(engine, meshVertexShader, meshFragShader, opaquePipeline.layout->get());
+    build_transparent_pipeline(engine, meshVertexShader, meshFragShader, transparentPipeline.layout->get());
 
     vkDestroyShaderModule(engine->_device, meshFragShader, nullptr);
     vkDestroyShaderModule(engine->_device, meshVertexShader, nullptr);
@@ -43,8 +55,9 @@ void GLTFMetallic_Roughness::create_material_layout(VulkanEngine* engine) {
             VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
 }
 
-VkPipelineLayout GLTFMetallic_Roughness::create_pipeline_layout(
-        VulkanEngine* engine) {
+// Option 1: Modify create_pipeline_layout to return a unique_ptr
+// This helper is illustrative; the actual create_pipeline_layout would be modified
+std::unique_ptr<VulkanPipelineLayout> GLTFMetallic_Roughness::create_pipeline_layout_unique_ptr(VulkanEngine* engine) {
     VkPushConstantRange matrixRange{};
     matrixRange.offset = 0;
     matrixRange.size = sizeof(GPUDrawPushConstants);
@@ -59,17 +72,42 @@ VkPipelineLayout GLTFMetallic_Roughness::create_pipeline_layout(
     mesh_layout_info.pPushConstantRanges = &matrixRange;
     mesh_layout_info.pushConstantRangeCount = 1;
 
-    VkPipelineLayout newLayout;
-    VK_CHECK(vkCreatePipelineLayout(engine->_device, &mesh_layout_info, nullptr,
-                                    &newLayout));
-
-    return newLayout;
+    // VkPipelineLayout newLayout;
+    // VK_CHECK(vkCreatePipelineLayout(engine->_device, &mesh_layout_info, nullptr,
+    //                                 &newLayout));
+    // return newLayout;
+    return std::make_unique<VulkanPipelineLayout>(engine->_device, mesh_layout_info);
 }
+
+
+// Original create_pipeline_layout, now perhaps unused or for internal logic if needed
+// VkPipelineLayout GLTFMetallic_Roughness::create_pipeline_layout(
+//         VulkanEngine* engine) {
+//     VkPushConstantRange matrixRange{};
+//     matrixRange.offset = 0;
+//     matrixRange.size = sizeof(GPUDrawPushConstants);
+//     matrixRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+
+//     VkDescriptorSetLayout layouts[] = {engine->_gpuSceneDataDescriptorLayout->get(), // Ensure ->get() if these are unique_ptr
+//                                        materialLayout};
+//     VkPipelineLayoutCreateInfo mesh_layout_info =
+//             vkinit::pipeline_layout_create_info();
+//     mesh_layout_info.setLayoutCount = 2;
+//     mesh_layout_info.pSetLayouts = layouts;
+//     mesh_layout_info.pPushConstantRanges = &matrixRange;
+//     mesh_layout_info.pushConstantRangeCount = 1;
+
+//     VkPipelineLayout newLayout_raw;
+//     VK_CHECK(vkCreatePipelineLayout(engine->_device, &mesh_layout_info, nullptr,
+//                                     &newLayout_raw));
+//     return newLayout_raw;
+// }
+
 
 void GLTFMetallic_Roughness::build_opaque_pipeline(VulkanEngine* engine,
                                                    VkShaderModule vertexShader,
                                                    VkShaderModule fragShader,
-                                                   VkPipelineLayout layout) {
+                                                   VkPipelineLayout layout_handle) { // Takes raw handle
     PipelineBuilder pipelineBuilder;
     pipelineBuilder.set_shaders(vertexShader, fragShader);
     pipelineBuilder.set_input_topology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
@@ -78,24 +116,35 @@ void GLTFMetallic_Roughness::build_opaque_pipeline(VulkanEngine* engine,
     pipelineBuilder.set_multisampling_none();
     pipelineBuilder.disable_blending();
     pipelineBuilder.enable_depthtest(true, VK_COMPARE_OP_GREATER_OR_EQUAL);
-    pipelineBuilder.set_color_attachment_format(engine->_drawImage.imageFormat);
-    pipelineBuilder.set_depth_format(engine->_depthImage.imageFormat);
-    pipelineBuilder._pipelineLayout = layout;
+    pipelineBuilder.set_color_attachment_format(engine->_drawImage->getFormat()); // Access via getter
+    pipelineBuilder.set_depth_format(engine->_depthImage ? engine->_depthImage->getFormat() : VK_FORMAT_UNDEFINED); // Access via getter, check for null
+    pipelineBuilder._pipelineLayout = layout_handle;
 
-    opaquePipeline.pipeline = pipelineBuilder.build_pipeline(engine->_device);
+    // opaquePipeline.pipeline = pipelineBuilder.build_pipeline(engine->_device);
+    VkPipeline raw_pipeline = pipelineBuilder.build_pipeline(engine->_device);
+    if (raw_pipeline != VK_NULL_HANDLE) {
+        opaquePipeline.pipeline = std::make_unique<VulkanPipeline>(engine->_device, raw_pipeline); // Wrap raw pipeline
+    }
 }
 
 void GLTFMetallic_Roughness::build_transparent_pipeline(
         VulkanEngine* engine, VkShaderModule vertexShader,
-        VkShaderModule fragShader, VkPipelineLayout layout) {
+        VkShaderModule fragShader, VkPipelineLayout layout_handle) { // Takes raw handle
     PipelineBuilder pipelineBuilder;
     pipelineBuilder.set_shaders(vertexShader, fragShader);
+    // Assuming color and depth formats are set similarly for transparent pipeline if needed
+    pipelineBuilder.set_color_attachment_format(engine->_drawImage->getFormat()); 
+    pipelineBuilder.set_depth_format(engine->_depthImage ? engine->_depthImage->getFormat() : VK_FORMAT_UNDEFINED);
     pipelineBuilder.enable_blending_additive();
-    pipelineBuilder.enable_depthtest(false, VK_COMPARE_OP_GREATER_OR_EQUAL);
-    pipelineBuilder._pipelineLayout = layout;
+    pipelineBuilder.enable_depthtest(false, VK_COMPARE_OP_GREATER_OR_EQUAL); // Typically false for transparent
+    pipelineBuilder._pipelineLayout = layout_handle;
 
-    transparentPipeline.pipeline =
-            pipelineBuilder.build_pipeline(engine->_device);
+    // transparentPipeline.pipeline =
+    //         pipelineBuilder.build_pipeline(engine->_device);
+    VkPipeline raw_pipeline = pipelineBuilder.build_pipeline(engine->_device);
+    if (raw_pipeline != VK_NULL_HANDLE) {
+         transparentPipeline.pipeline = std::make_unique<VulkanPipeline>(engine->_device, raw_pipeline); // Wrap raw pipeline
+    }
 }
 
 MaterialInstance GLTFMetallic_Roughness::write_material(

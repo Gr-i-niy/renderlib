@@ -12,8 +12,10 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
+#include <memory> // For std::unique_ptr
 #include <vk_mem_alloc.h>
 #include <vulkan/vk_platform.h>
+#include "graphics/vulkan/vulkan_wrappers.h" // For Vulkan wrapper classes
 #include <vulkan/vulkan_core.h>
 
 #include "vk_descriptors.h"
@@ -52,13 +54,15 @@ struct DeletionQueue {
 };
 
 struct FrameData {
-    VkCommandPool _commandPool;
+    std::unique_ptr<VulkanCommandPool> _commandPool;
     VkCommandBuffer _mainCommandBuffer;
 
-    VkSemaphore _swapchainSemaphore, _renderSemaphore;
-    VkFence _renderFence;
+    std::unique_ptr<VulkanSemaphore> _swapchainSemaphore;
+    std::unique_ptr<VulkanSemaphore> _renderSemaphore;
+    std::unique_ptr<VulkanFence> _renderFence;
 
-    DeletionQueue _deletionQueue;
+    // DeletionQueue _deletionQueue; // Removed
+    std::unique_ptr<VulkanAllocatedBuffer> _sceneDataBuffer; // Added
     DescriptorAllocatorGrowable _frameDescriptors;
 };
 
@@ -156,31 +160,31 @@ public:
     VkDevice _device;             // Vulkan device for commands
     VkSurfaceKHR _surface;        // Vulkan window surface
 
-    VkSwapchainKHR _swapchain;
+    std::unique_ptr<VulkanSwapchainKHR> _swapchain;
     VkFormat _swapchainImageFormat;
 
-    std::vector<VkImage> _swapchainImages;
-    std::vector<VkImageView> _swapchainImageViews;
+    std::vector<VkImage> _swapchainImages; // Remains std::vector<VkImage>
+    std::vector<std::unique_ptr<VulkanImageView>> _swapchainImageViews;
     VkExtent2D _swapchainExtent;
 
     DeletionQueue _mainDeletionQueue;
 
-    VmaAllocator _allocator;
+    std::unique_ptr<VulkanAllocator> _allocator;
 
-    AllocatedImage _drawImage;
-    AllocatedImage _depthImage;
+    std::unique_ptr<VulkanAllocatedImage> _drawImage;
+    std::unique_ptr<VulkanAllocatedImage> _depthImage;
     VkExtent2D _drawExtent;
     float renderScale = 1.f;
 
     DescriptorAllocatorGrowable globalDescriptorAllocator;
 
     VkDescriptorSet _drawImageDescriptors;
-    VkDescriptorSetLayout _drawImageDescriptorLayout;
+    std::unique_ptr<VulkanDescriptorSetLayout> _drawImageDescriptorLayout;
 
     // immediate submit structures
-    VkFence _immFence;
-    VkCommandBuffer _immCommandBuffer;
-    VkCommandPool _immCommandPool;
+    std::unique_ptr<VulkanFence> _immFence;
+    VkCommandBuffer _immCommandBuffer; // Remains VkCommandBuffer
+    std::unique_ptr<VulkanCommandPool> _immCommandPool;
 
 
     GPUMeshBuffers rectangle;
@@ -194,7 +198,7 @@ public:
 
     GPUSceneData sceneData;
 
-    VkDescriptorSetLayout _gpuSceneDataDescriptorLayout;
+    std::unique_ptr<VulkanDescriptorSetLayout> _gpuSceneDataDescriptorLayout;
 
     AllocatedImage create_image(VkExtent3D size, VkFormat format,
                                 VkImageUsageFlags usage,
@@ -202,17 +206,17 @@ public:
     AllocatedImage create_image(const void* data, VkExtent3D size,
                                 VkFormat format, VkImageUsageFlags usage,
                                 bool mipmapped = false) const;
-    void destroy_image(const AllocatedImage& img) const;
+    void destroy_image(const AllocatedImage& img) const; // This might need to be removed or refactored if AllocatedImage struct is removed
 
-    AllocatedImage _whiteImage;
-    AllocatedImage _blackImage;
-    AllocatedImage _greyImage;
-    AllocatedImage _errorCheckerboardImage;
+    std::unique_ptr<VulkanAllocatedImage> _whiteImage;
+    std::unique_ptr<VulkanAllocatedImage> _blackImage;
+    std::unique_ptr<VulkanAllocatedImage> _greyImage;
+    std::unique_ptr<VulkanAllocatedImage> _errorCheckerboardImage;
 
-    VkSampler _defaultSamplerLinear;
-    VkSampler _defaultSamplerNearest;
+    std::unique_ptr<VulkanSampler> _defaultSamplerLinear;
+    std::unique_ptr<VulkanSampler> _defaultSamplerNearest;
 
-    VkDescriptorSetLayout _singleImageDescriptorLayout;
+    std::unique_ptr<VulkanDescriptorSetLayout> _singleImageDescriptorLayout;
 
     MaterialInstance defaultData;
     GLTFMetallic_Roughness metalRoughMaterial;

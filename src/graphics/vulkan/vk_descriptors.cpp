@@ -120,49 +120,118 @@ VkDescriptorPool DescriptorAllocatorGrowable::create_pool(
     return newPool;
 }
 
-void DescriptorAllocatorGrowable::init(VkDevice device, uint32_t initialSets,
-                                       std::span<PoolSizeRatio> poolRatios) {
-    ratios.clear();
+// Constructor - replaces init()
+DescriptorAllocatorGrowable::DescriptorAllocatorGrowable(VkDevice device, uint32_t initialSets,
+                                                       std::span<PoolSizeRatio> poolRatios)
+    : _device(device) { // Initialize _device
+    // ratios.clear(); // Not needed as it's a new object or assigned from
+    ratios.assign(poolRatios.begin(), poolRatios.end());
 
-    for (auto r : poolRatios) {
-        ratios.push_back(r);
+    uint32_t firstPoolSetCount = (initialSets == 0) ? 10u : initialSets; // Ensure first pool is not 0 sets
+    
+    const VkDescriptorPool newPool = create_pool(_device, firstPoolSetCount, ratios); // Use member _device and ratios
+    readyPools.push_back(newPool);
+
+    // Set setsPerPool for the *next* pool's dynamic growth potential
+    setsPerPool = static_cast<uint32_t>(static_cast<float>(firstPoolSetCount) * 1.5f);
+     if (firstPoolSetCount == 0) { // if initialSets was 0, firstPoolSetCount is 10.
+        setsPerPool = static_cast<uint32_t>(10.0f * 1.5f); 
+    } else if (setsPerPool == firstPoolSetCount && firstPoolSetCount > 0) { // Ensure growth if 1.5 factor results in same integer
+        setsPerPool = firstPoolSetCount + 1;
+    }
+    if (setsPerPool == 0) { // Absolute fallback if initialSets was extremely small (e.g., 1 and 1*1.5 truncates to 1)
+        setsPerPool = (firstPoolSetCount > 0) ? firstPoolSetCount + 1 : 10u;
     }
 
-    const VkDescriptorPool newPool =
-            create_pool(device, initialSets, poolRatios);
 
-    setsPerPool = static_cast<uint32_t>(initialSets *
-                                        1.5);  // grow it next allocation
-
-    readyPools.push_back(newPool);
+    if (setsPerPool > 4092) { // Cap growth
+        setsPerPool = 4092;
+    }
 }
 
-void DescriptorAllocatorGrowable::clear_pools(VkDevice device) {
+DescriptorAllocatorGrowable::~DescriptorAllocatorGrowable() {
+    if (_device != VK_NULL_HANDLE) { // Only destroy if initialized (device is set)
+        destroy_pools(_device); // Pass the stored device
+    }
+}
+
+DescriptorAllocatorGrowable::DescriptorAllocatorGrowable(DescriptorAllocatorGrowable&& other) noexcept
+    : _device(other._device),
+      ratios(std::move(other.ratios)),
+      fullPools(std::move(other.fullPools)),
+      readyPools(std::move(other.readyPools)),
+      setsPerPool(other.setsPerPool) {
+    // Invalidate other to prevent double deletion by its destructor
+    other._device = VK_NULL_HANDLE;
+    other.setsPerPool = 0;
+    // other.ratios, other.fullPools, other.readyPools are already in a valid empty state after std::move
+}
+
+DescriptorAllocatorGrowable& DescriptorAllocatorGrowable::operator=(DescriptorAllocatorGrowable&& other) noexcept {
+    if (this != &other) {
+        // Destroy existing resources in *this
+        if (_device != VK_NULL_HANDLE) {
+            destroy_pools(_device);
+        }
+
+        // Move resources from other to *this
+        _device = other._device;
+        ratios = std::move(other.ratios);
+        fullPools = std::move(other.fullPools);
+        readyPools = std::move(other.readyPools);
+        setsPerPool = other.setsPerPool;
+
+        // Invalidate other
+        other._device = VK_NULL_HANDLE;
+        other.setsPerPool = 0;
+        // other.ratios, other.fullPools, other.readyPools are already in a valid empty state after std::move
+    }
+    return *this;
+}
+
+void DescriptorAllocatorGrowable::clear_pools(VkDevice device_param) { // Renamed param to avoid conflict
+    // Use internal _device if valid, otherwise use parameter.
+    // This allows calling clear_pools on a default-constructed object if a device is passed.
+    VkDevice targetDevice = (_device != VK_NULL_HANDLE) ? _device : device_param;
+    if (targetDevice == VK_NULL_HANDLE) return; // Cannot operate without a device
+
     for (const auto p : readyPools) {
-        vkResetDescriptorPool(device, p, 0);
+        vkResetDescriptorPool(targetDevice, p, 0);
     }
     for (auto p : fullPools) {
-        vkResetDescriptorPool(device, p, 0);
+        vkResetDescriptorPool(targetDevice, p, 0);
         readyPools.push_back(p);
     }
     fullPools.clear();
 }
 
-void DescriptorAllocatorGrowable::destroy_pools(VkDevice device) {
+void DescriptorAllocatorGrowable::destroy_pools(VkDevice device_param) { // Renamed param
+    VkDevice targetDevice = (_device != VK_NULL_HANDLE) ? _device : device_param;
+     if (targetDevice == VK_NULL_HANDLE) return;
+
     for (const auto p : readyPools) {
-        vkDestroyDescriptorPool(device, p, nullptr);
+        vkDestroyDescriptorPool(targetDevice, p, nullptr);
     }
     readyPools.clear();
     for (const auto p : fullPools) {
-        vkDestroyDescriptorPool(device, p, nullptr);
+        vkDestroyDescriptorPool(targetDevice, p, nullptr);
     }
     fullPools.clear();
+    ratios.clear(); 
+    // setsPerPool = 0; // Not strictly necessary to reset here, as it's reset in move ops or on new construction.
+    // _device is not nulled out here; The owning object's state (destructor or move op) handles that.
 }
 
 VkDescriptorSet DescriptorAllocatorGrowable::allocate(
-        VkDevice device, VkDescriptorSetLayout layout, const void* pNext) {
+        VkDevice device_param, VkDescriptorSetLayout layout, const void* pNext) { // Renamed param
+    VkDevice targetDevice = (_device != VK_NULL_HANDLE) ? _device : device_param;
+    if (targetDevice == VK_NULL_HANDLE) {
+       // Optionally: Log an error or throw an exception if no valid device.
+       return VK_NULL_HANDLE;
+    }
+    
     // get or create a pool to allocate from
-    VkDescriptorPool poolToUse = get_pool(device);
+    VkDescriptorPool poolToUse = get_pool(targetDevice); // Use targetDevice
 
     VkDescriptorSetAllocateInfo allocInfo = {};
     allocInfo.pNext = pNext;
@@ -172,17 +241,17 @@ VkDescriptorSet DescriptorAllocatorGrowable::allocate(
     allocInfo.pSetLayouts = &layout;
 
     VkDescriptorSet ds;
-    VkResult result = vkAllocateDescriptorSets(device, &allocInfo, &ds);
+    VkResult result = vkAllocateDescriptorSets(targetDevice, &allocInfo, &ds); // Use targetDevice
 
     // allocation failed. Try again
     if (result == VK_ERROR_OUT_OF_POOL_MEMORY ||
         result == VK_ERROR_FRAGMENTED_POOL) {
         fullPools.push_back(poolToUse);
 
-        poolToUse = get_pool(device);
+        poolToUse = get_pool(targetDevice); // Use targetDevice
         allocInfo.descriptorPool = poolToUse;
 
-        VK_CHECK(vkAllocateDescriptorSets(device, &allocInfo, &ds));
+        VK_CHECK(vkAllocateDescriptorSets(targetDevice, &allocInfo, &ds)); // Use targetDevice
     }
 
     readyPools.push_back(poolToUse);

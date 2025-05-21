@@ -15,6 +15,7 @@
 #include "glm/vec4.hpp"
 #include "vk_mem_alloc.h"
 #include "vulkan/vulkan.h"
+#include "graphics/vulkan/vulkan_wrappers.h" // Added for VulkanAllocatedBuffer
 
 #define VK_CHECK(x)                                                   \
     do {                                                              \
@@ -49,8 +50,8 @@ struct Vertex {
 
 // holds the resources needed for a mesh
 struct GPUMeshBuffers {
-    AllocatedBuffer indexBuffer;
-    AllocatedBuffer vertexBuffer;
+    std::unique_ptr<VulkanAllocatedBuffer> indexBuffer;
+    std::unique_ptr<VulkanAllocatedBuffer> vertexBuffer;
     VkDeviceAddress vertexBufferAddress;
 };
 
@@ -63,8 +64,8 @@ struct GPUDrawPushConstants {
 enum class MaterialPass : uint8_t { MainColor, Transparent, Other };
 
 struct MaterialPipeline {
-    VkPipeline pipeline;
-    VkPipelineLayout layout;
+    std::unique_ptr<VulkanPipeline> pipeline;
+    std::unique_ptr<VulkanPipelineLayout> layout;
 };
 
 struct MaterialInstance {

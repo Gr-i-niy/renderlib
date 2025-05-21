@@ -42,15 +42,25 @@ public:
         float ratio;
     };
 
-    void init(VkDevice device, uint32_t initialSets,
-              std::span<PoolSizeRatio> poolRatios);
-    void clear_pools(VkDevice device);
-    void destroy_pools(VkDevice device);
+    DescriptorAllocatorGrowable() = default; // Added default constructor
+    DescriptorAllocatorGrowable(VkDevice device, uint32_t initialSets,
+                                std::span<PoolSizeRatio> poolRatios); // Added constructor
+    ~DescriptorAllocatorGrowable(); // Added destructor
+
+    DescriptorAllocatorGrowable(DescriptorAllocatorGrowable&& other) noexcept; // Added move constructor
+    DescriptorAllocatorGrowable& operator=(DescriptorAllocatorGrowable&& other) noexcept; // Added move assignment
+
+    // void init(VkDevice device, uint32_t initialSets, // Removed init
+    //           std::span<PoolSizeRatio> poolRatios);
+    void clear_pools(VkDevice device); // Kept
+    void destroy_pools(VkDevice device); // Kept, will be called by destructor
 
     VkDescriptorSet allocate(VkDevice device, VkDescriptorSetLayout layout,
                              const void* pNext = nullptr);
 
 private:
+    VkDevice _device = VK_NULL_HANDLE; // Added _device member
+
     VkDescriptorPool get_pool(VkDevice device);
     VkDescriptorPool create_pool(VkDevice device, uint32_t setCount,
                                  std::span<PoolSizeRatio> poolRatios);
@@ -58,7 +68,7 @@ private:
     std::vector<PoolSizeRatio> ratios;
     std::vector<VkDescriptorPool> fullPools;
     std::vector<VkDescriptorPool> readyPools;
-    uint32_t setsPerPool;
+    uint32_t setsPerPool = 0; // Initialize to ensure it has a defined state
 };
 
 struct DescriptorWriter {
