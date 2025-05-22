@@ -176,20 +176,23 @@ MaterialInstance GLTFMetallic_Roughness::write_material(
     return matData;
 }
 
-void Pipelines::init(VkDevice device,
+// Pipelines Implementation
+Pipelines::~Pipelines() {} // Destructor (already present from Turn 52 diff)
+
+bool Pipelines::init(VkDevice device, 
                      VkDescriptorSetLayout singleImageDescriptorLayout,
                      VkDescriptorSetLayout drawImageDescriptorLayout,
-                     AllocatedImage drawImage) {
+                     const VulkanAllocatedImage& drawImage) { // Signature matches header
     _device = device;
     _singleImageDescriptorLayout = singleImageDescriptorLayout;
     _drawImageDescriptorLayout = drawImageDescriptorLayout;
-    _drawImage = drawImage;
+    // _drawImage member was removed in pipelines.h (Turn 54), so no assignment here.
 
     GraphicsPipeline::GraphicsPipelineConfig triangleConfig;
     triangleConfig.vertexShaderPath = "./shaders/colored_triangle.vert.spv";
     triangleConfig.fragmentShaderPath = "./shaders/colored_triangle.frag.spv";
-    triangleConfig.colorFormat = _drawImage.imageFormat;
-    triangleConfig.depthFormat = VK_FORMAT_UNDEFINED;
+    triangleConfig.colorFormat = drawImage.getFormat(); // Use parameter.getFormat()
+    triangleConfig.depthFormat = VK_FORMAT_UNDEFINED; // Assuming no depth for this simple pipeline
     triangleConfig.depthTest = false;
     triangleConfig.cullMode = VK_CULL_MODE_NONE;
     triangleConfig.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
@@ -200,8 +203,8 @@ void Pipelines::init(VkDevice device,
     GraphicsPipeline::GraphicsPipelineConfig meshConfig;
     meshConfig.vertexShaderPath = "./shaders/colored_triangle_mesh.vert.spv";
     meshConfig.fragmentShaderPath = "./shaders/tex_image.frag.spv";
-    meshConfig.colorFormat = _drawImage.imageFormat;
-    meshConfig.depthFormat = VK_FORMAT_UNDEFINED;
+    meshConfig.colorFormat = drawImage.getFormat(); // Use parameter.getFormat()
+    meshConfig.depthFormat = VK_FORMAT_UNDEFINED; // Assuming no depth, or use drawImage.getFormat() if appropriate
     meshConfig.depthTest = true;
     meshConfig.depthCompareOp = VK_COMPARE_OP_GREATER;
     meshConfig.cullMode = VK_CULL_MODE_NONE;
@@ -220,25 +223,18 @@ void Pipelines::init(VkDevice device,
     
     // Initialize gradient pipeline
     ComputePipeline::ComputePipelineConfig gradientConfig;
-    gradientConfig.descriptorSetLayout = _drawImageDescriptorLayout;
+    gradientConfig.descriptorSetLayout = drawImageDescriptorLayout; 
     gradientConfig.shaderPath = "./shaders/gradient.comp.spv";
     
     gradientPipeline = std::make_unique<ComputePipeline>(gradientConfig);
-    gradientPipeline->init(device);
+    if (!gradientPipeline->init(device, drawImageDescriptorLayout, drawImage)) { 
+        fmt::println("Failed to initialize gradient pipeline");
+        return false;
+    }
 
     fmt::println("Pipelines initialized successfully");
+    return true;
 }
 
-void Pipelines::destroy() {
-    if (trianglePipeline) {
-        trianglePipeline->destroy();
-    }
-    
-    if (meshPipeline) {
-        meshPipeline->destroy();
-    }
-    
-    if (gradientPipeline) {
-        gradientPipeline->destroy();
-    }
+// void Pipelines::destroy() {} // Removed by commenting out or deleting the whole function
 }

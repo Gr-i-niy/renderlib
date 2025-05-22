@@ -216,8 +216,9 @@ void VulkanEngine::init_imgui() {
     pool_info.poolSizeCount = (uint32_t)std::size(pool_sizes);
     pool_info.pPoolSizes = pool_sizes;
 
-    VkDescriptorPool imguiPool;
-    VK_CHECK(vkCreateDescriptorPool(_device, &pool_info, nullptr, &imguiPool));
+    // VkDescriptorPool imguiPool; // Removed local variable
+    // VK_CHECK(vkCreateDescriptorPool(_device, &pool_info, nullptr, &imguiPool));
+    _imguiPool = std::make_unique<VulkanDescriptorPool>(_device, pool_info); // Use member unique_ptr
 
     // 2: initialize imgui library
 
@@ -233,7 +234,7 @@ void VulkanEngine::init_imgui() {
     init_info.PhysicalDevice = _chosenGPU;
     init_info.Device = _device;
     init_info.Queue = _graphicsQueue;
-    init_info.DescriptorPool = imguiPool;
+    init_info.DescriptorPool = _imguiPool->get(); // Use getter from unique_ptr
     init_info.MinImageCount = 3;
     init_info.ImageCount = 3;
     init_info.UseDynamicRendering = true;
@@ -252,10 +253,10 @@ void VulkanEngine::init_imgui() {
     ImGui_ImplVulkan_CreateFontsTexture();
 
     // add destroy the imgui created structures
-    _mainDeletionQueue.push_function([=, this] {
-        ImGui_ImplVulkan_Shutdown();
-        vkDestroyDescriptorPool(_device, imguiPool, nullptr);
-    });
+    // _mainDeletionQueue.push_function([=, this] { // Removed, RAII handles pool, shutdown in VulkanEngine::cleanup
+    //     ImGui_ImplVulkan_Shutdown();
+    //     // vkDestroyDescriptorPool(_device, imguiPool, nullptr); // Old way
+    // });
 }
 
 void VulkanEngine::init_descriptors() {
@@ -325,9 +326,19 @@ void VulkanEngine::init_descriptors() {
 
 void VulkanEngine::init_pipelines() {
     // Create a temporary AllocatedImage for pipelines.init if its signature hasn't changed yet
-    AllocatedImage tempDrawImage = {_drawImage->getImage(), _drawImage->getImageView(), _drawImage->getAllocation(), _drawImage->getExtent(), _drawImage->getFormat()};
-    pipelines.init(_device, _singleImageDescriptorLayout->get(), _drawImageDescriptorLayout->get(), tempDrawImage);
-    _mainDeletionQueue.push_function([&]() { pipelines.destroy(); });
+    // AllocatedImage tempDrawImage = {_drawImage->getImage(), _drawImage->getImageView(), _drawImage->getAllocation(), _drawImage->getExtent(), _drawImage->getFormat()};
+    // pipelines.init(_device, _singleImageDescriptorLayout->get(), _drawImageDescriptorLayout->get(), tempDrawImage);
+    // _mainDeletionQueue.push_function([&]() { pipelines.destroy(); }); // destroy is removed, RAII handles it.
+
+    // Pass the dereferenced VulkanAllocatedImage unique_ptr.
+    // The pipelines.init() signature now takes const VulkanAllocatedImage&
+    if (_drawImage && _singleImageDescriptorLayout && _drawImageDescriptorLayout) {
+        pipelines.init(_device, _singleImageDescriptorLayout->get(), _drawImageDescriptorLayout->get(), *_drawImage);
+    } else {
+        // Handle error: required resources for pipeline initialization are missing.
+        LOGE("Failed to initialize Pipelines: Required resources are null.");
+    }
+    // The _mainDeletionQueue entry for pipelines.destroy() is removed as Pipelines destructor will handle cleanup.
 
     metalRoughMaterial.build_pipelines(this);
 }
@@ -605,9 +616,11 @@ void VulkanEngine::cleanup() {
         // make sure the gpu has stopped doing its things
         vkDeviceWaitIdle(_device);
 
+        ImGui_ImplVulkan_Shutdown(); // Shutdown ImGui Vulkan backend
+
         loadedScenes.clear();
 
-        _mainDeletionQueue.flush();
+        // _mainDeletionQueue.flush(); // Removed
 
         for (const auto& _frame : _frames) {
             // already written from before

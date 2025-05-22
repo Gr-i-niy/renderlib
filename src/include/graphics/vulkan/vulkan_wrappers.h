@@ -456,6 +456,11 @@ public:
         vkCreateComputePipelines(device_, pipelineCache, 1, &createInfo, nullptr, &pipeline_);
     }
 
+    // Constructor to wrap an existing VkPipeline handle
+    VulkanPipeline(VkDevice device, VkPipeline pipeline) : device_(device), pipeline_(pipeline) {
+        // Assumes ownership of the provided handle
+    }
+
     ~VulkanPipeline() {
         if (pipeline_ != VK_NULL_HANDLE) {
             vkDestroyPipeline(device_, pipeline_, nullptr);

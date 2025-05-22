@@ -7,10 +7,11 @@
 #include "vk_images.h"
 #include "vk_initializers.h"
 #include "vk_pipelines.h"
-#include "vk_types.h"
+#include "vk_types.h" // Contains AllocatedImage
 #include "IPipeline.h"
 #include "GraphicsPipeline.h"
 #include "ComputePipeline.h"
+#include "graphics/vulkan/vulkan_wrappers.h" // For VulkanAllocatedImage
 
 class VulkanEngine;
 
@@ -67,15 +68,17 @@ public:
     std::unique_ptr<GraphicsPipeline> meshPipeline;
     std::unique_ptr<ComputePipeline> gradientPipeline;
 
-    void init(VkDevice device,
+    // Changed AllocatedImage to const VulkanAllocatedImage& and return type to bool
+    bool init(VkDevice device,
               VkDescriptorSetLayout singleImageDescriptorLayout,
               VkDescriptorSetLayout drawImageDescriptorLayout,
-              AllocatedImage drawImage);
-    void destroy();
+              const VulkanAllocatedImage& drawImage); 
+    // void destroy(); // Removed
+    ~Pipelines(); // Added destructor
 
 private:
-    VkDevice _device;
+    VkDevice _device; // Kept for now
     VkDescriptorSetLayout _singleImageDescriptorLayout;
     VkDescriptorSetLayout _drawImageDescriptorLayout;
-    AllocatedImage _drawImage;
+    // AllocatedImage _drawImage; // Removed, use parameter from init directly
 };

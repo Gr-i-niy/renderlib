@@ -1,8 +1,14 @@
 #include "graphics/vulkan/GraphicsPipeline.h"
+#include "graphics/vulkan/vk_pipelines.h" // For PipelineBuilder
+#include "graphics/vulkan/vk_initializers.h" // For vkinit
+#include "graphics/vulkan/vulkan_wrappers.h" // For Vulkan wrappers
+#include <fmt/core.h> // For fmt::println
 
 GraphicsPipeline::GraphicsPipeline(const GraphicsPipelineConfig& config) 
     : _config(config) {
 }
+
+GraphicsPipeline::~GraphicsPipeline() {} // Empty destructor, unique_ptrs handle cleanup
 
 void GraphicsPipeline::init(VkDevice device) {
     _device = device;
@@ -19,7 +25,8 @@ void GraphicsPipeline::init(VkDevice device) {
         layoutInfo.pPushConstantRanges = _config.pushConstants.data();
     }
     
-    VK_CHECK(vkCreatePipelineLayout(device, &layoutInfo, nullptr, &_pipelineLayout));
+    // VK_CHECK(vkCreatePipelineLayout(device, &layoutInfo, nullptr, &_pipelineLayout));
+    _pipelineLayout = std::make_unique<VulkanPipelineLayout>(device, layoutInfo);
     
     VkShaderModule vertexShader;
     if (!vkutil::load_shader_module(_config.vertexShaderPath.c_str(), _device, &vertexShader)) {
@@ -55,40 +62,51 @@ void GraphicsPipeline::init(VkDevice device) {
     
     pipelineBuilder.set_color_attachment_format(_config.colorFormat);
     pipelineBuilder.set_depth_format(_config.depthFormat);
-    pipelineBuilder._pipelineLayout = _pipelineLayout;
+    pipelineBuilder._pipelineLayout = _pipelineLayout->get(); // Use getter for raw handle
     
     if (_config.customPipelineSetup) {
         _config.customPipelineSetup(pipelineBuilder);
     }
     
-    _pipeline = pipelineBuilder.build_pipeline(_device);
+    // _pipeline = pipelineBuilder.build_pipeline(_device);
+    VkPipeline rawPipeline = pipelineBuilder.build_pipeline(_device);
+    if (rawPipeline != VK_NULL_HANDLE) {
+        _pipeline = std::make_unique<VulkanPipeline>(_device, rawPipeline);
+    }
     
     vkDestroyShaderModule(_device, vertexShader, nullptr);
     vkDestroyShaderModule(_device, fragmentShader, nullptr);
 }
 
 void GraphicsPipeline::bind(VkCommandBuffer cmd) {
-    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, _pipeline);
+    if (_pipeline) {
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, _pipeline->get()); // Use getter
+    }
 }
 
 void GraphicsPipeline::bindDescriptorSets(VkCommandBuffer cmd,
                                           const VkDescriptorSet* descriptorSets,
                                           uint32_t setCount,
                                           uint32_t firstSet) {
-    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, _pipelineLayout, 
-                           firstSet, setCount, descriptorSets, 0, nullptr);
+    if (_pipelineLayout) {
+        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, _pipelineLayout->get(), // Use getter
+                               firstSet, setCount, descriptorSets, 0, nullptr);
+    }
 }
 
 void GraphicsPipeline::pushConstants(VkCommandBuffer cmd, VkShaderStageFlags stageFlags, 
                                    uint32_t offset, uint32_t size, const void* data) {
-    vkCmdPushConstants(cmd, _pipelineLayout, stageFlags, offset, size, data);
+    if (_pipelineLayout) {
+        vkCmdPushConstants(cmd, _pipelineLayout->get(), stageFlags, offset, size, data); // Use getter
+    }
 }
 
-void GraphicsPipeline::destroy() {
-    if (_device != VK_NULL_HANDLE) {
-        vkDestroyPipelineLayout(_device, _pipelineLayout, nullptr);
-        vkDestroyPipeline(_device, _pipeline, nullptr);
-        _pipeline = VK_NULL_HANDLE;
-        _pipelineLayout = VK_NULL_HANDLE;
-    }
+// void GraphicsPipeline::destroy() { // Removed
+//     if (_device != VK_NULL_HANDLE) {
+//         vkDestroyPipelineLayout(_device, _pipelineLayout, nullptr);
+//         vkDestroyPipeline(_device, _pipeline, nullptr);
+//         _pipeline = VK_NULL_HANDLE;
+//         _pipelineLayout = VK_NULL_HANDLE;
+//     }
+// }
 }

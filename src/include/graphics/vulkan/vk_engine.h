@@ -35,23 +35,7 @@ struct MeshAsset;
 
 constexpr unsigned int FRAME_OVERLAP = 2;
 
-
-struct DeletionQueue {
-    std::deque<std::function<void()>> deletors;
-
-    void push_function(std::function<void()>&& function) {
-        deletors.push_back(function);
-    }
-
-    void flush() {
-        // reverse iterate the deletion queue to execute all the functions
-        for (auto& deletor : std::ranges::reverse_view(deletors)) {
-            deletor();  // call functors
-        }
-
-        deletors.clear();
-    }
-};
+// DeletionQueue struct removed
 
 struct FrameData {
     std::unique_ptr<VulkanCommandPool> _commandPool;
@@ -167,7 +151,7 @@ public:
     std::vector<std::unique_ptr<VulkanImageView>> _swapchainImageViews;
     VkExtent2D _swapchainExtent;
 
-    DeletionQueue _mainDeletionQueue;
+    // DeletionQueue _mainDeletionQueue; // Removed
 
     std::unique_ptr<VulkanAllocator> _allocator;
 
@@ -212,6 +196,8 @@ public:
     std::unique_ptr<VulkanAllocatedImage> _blackImage;
     std::unique_ptr<VulkanAllocatedImage> _greyImage;
     std::unique_ptr<VulkanAllocatedImage> _errorCheckerboardImage;
+
+    std::unique_ptr<VulkanDescriptorPool> _imguiPool; // Added for ImGui
 
     std::unique_ptr<VulkanSampler> _defaultSamplerLinear;
     std::unique_ptr<VulkanSampler> _defaultSamplerNearest;
